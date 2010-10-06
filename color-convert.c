@@ -13,6 +13,7 @@
 #define HEIGHT 720
 
 #define FILENAME "sample.yuv420"
+#define FRAME_TIME_MS 40
 
 static uint8_t y_data[WIDTH*HEIGHT];
 static uint8_t u_data[WIDTH * HEIGHT / 4];
@@ -227,6 +228,10 @@ main (int argc, char **argv)
     const char *glx_extensions;
     GLuint handle;
     GLenum err;
+    GTimer *frame_timer;
+
+    frame_timer = g_timer_new();
+    g_timer_start(frame_timer);
 
     load_data();
 
@@ -314,12 +319,21 @@ main (int argc, char **argv)
         }
 
         if (mapped) {
+            double elapsed;
+
             upload_data();
             draw_scene();
 
             glXSwapBuffers(dpy, window);
 
             frame_count ++;
+
+            elapsed = g_timer_elapsed(frame_timer, NULL) * 1000;
+            if (elapsed < FRAME_TIME_MS) {
+                g_usleep(1000 * (FRAME_TIME_MS - elapsed));
+            }
+
+            g_timer_start(frame_timer);
         }
 
         if (frame_count % 1000 == 0) {
