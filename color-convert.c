@@ -341,9 +341,8 @@ main (int argc, char **argv)
     glEnable(GL_TEXTURE_2D);
 
     handle = compile_program();
-    setup_textures(handle);
-
     glUseProgram(handle);
+    setup_textures(handle);
 
     mapped = FALSE;
     XMapWindow(dpy, window);
