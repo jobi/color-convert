@@ -9,7 +9,6 @@
 #include <GL/glx.h>
 #include <GL/glext.h>
 
-
 #define WIDTH 1280
 #define HEIGHT 720
 
@@ -32,14 +31,14 @@ static const char *program=
   "uniform sampler2D Ytex;\n"
   "uniform sampler2D Utex,Vtex;\n"
   "void main(void) {\n"
-  "    float nx,ny,r,g,b,y,u,v;\n"
-  "    vec4 txl,ux,vx;"
+  "    float r,g,b,y,u,v;\n"
+  "    vec4 txl,ux,vx;\n"
+  "    vec2 nxy;\n"
 
-  "    nx = gl_TexCoord[0].x;\n"
-  "    ny = gl_TexCoord[0].y;\n"
-  "    y = texture2D(Ytex, vec2(nx,ny)).r;\n"
-  "    u = texture2D(Utex, vec2(nx/2.0, ny/2.0)).r;\n"
-  "    v = texture2D(Vtex, vec2(nx/2.0, ny/2.0)).r;\n"
+  "    nxy = gl_TexCoord[0].xy;\n"
+  "    y = texture2D(Ytex, nxy).r;\n"
+  "    u = texture2D(Utex, nxy*0.5).r;\n"
+  "    v = texture2D(Vtex, nxy*0.5).r;\n"
 
   "    y = 1.1643 * (y - 0.0625);\n"
   "    u = u - 0.5;\n"
@@ -49,10 +48,8 @@ static const char *program=
   "    g = y - 0.39173*u - 0.81290*v;\n"
   "    b = y + 2.017*u;\n"
 
-  "    gl_FragColor=vec4(r,g,b,1.0);\n"
+  "    gl_FragColor = vec4(r, g, b, 1.0);\n"
   "}\n";
-
-
 
 static void
 draw_scene(void)
@@ -151,7 +148,6 @@ setup_textures(GLuint program)
     glBindTexture(GL_TEXTURE_2D, textures[TEX_U]);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_DECAL);
 
     /* Select texture unit 2 as the active unit and bind the V texture. */
     glActiveTexture(GL_TEXTURE0 + TEX_V);
@@ -161,7 +157,6 @@ setup_textures(GLuint program)
     glBindTexture(GL_TEXTURE_2D, textures[TEX_V]);
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
-    glTexEnvf(GL_TEXTURE_ENV,GL_TEXTURE_ENV_MODE,GL_DECAL);
 
     /* Select texture unit 0 as the active unit and bind the Y texture. */
     glActiveTexture(GL_TEXTURE0 + TEX_Y);
@@ -171,7 +166,6 @@ setup_textures(GLuint program)
     glBindTexture(GL_TEXTURE_2D, textures[TEX_Y]);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexEnvf(GL_TEXTURE_ENV,GL_TEXTURE_ENV_MODE,GL_DECAL);
 }
 
 static GLuint
