@@ -1,6 +1,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <glib.h>
+#include <gdk-pixbuf/gdk-pixbuf.h>
 
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
@@ -14,16 +15,19 @@
 #define HEIGHT 720
 
 #define FILENAME "sample.yuv420"
+#define CANVAS_FILENAME "canvas.png"
 #define FRAME_TIME_MS 40
 
 static uint8_t y_data[WIDTH*HEIGHT];
 static uint8_t u_data[WIDTH * HEIGHT / 4];
 static uint8_t v_data[WIDTH * HEIGHT / 4];
+static GdkPixbuf *canvas_pixbuf;
 
 enum {
     TEX_Y,
     TEX_U,
     TEX_V,
+    TEX_CANVAS,
     N_TEX
 };
 
@@ -32,6 +36,7 @@ GLuint textures[N_TEX];
 static const char *program=
   "uniform sampler2D Ytex;\n"
   "uniform sampler2D Utex,Vtex;\n"
+  "uniform sampler2D canvas_tex;\n"
   "void main(void) {\n"
   "    float r,g,b,y,u,v;\n"
   "    vec4 txl,ux,vx;\n"
@@ -50,7 +55,7 @@ static const char *program=
   "    g = y - 0.39173*u - 0.81290*v;\n"
   "    b = y + 2.017*u;\n"
 
-  "    gl_FragColor = vec4(r, g, b, 1.0);\n"
+  "    gl_FragColor = mix(vec4(r, g, b, 1.0), texture2D(canvas_tex, nxy), 0.5);\n"
   "}\n";
 
 static void
@@ -78,6 +83,8 @@ draw_scene(void)
 static void
 upload_data()
 {
+    gboolean alpha;
+
     glActiveTexture(GL_TEXTURE0 + TEX_Y);
     glBindTexture(GL_TEXTURE_2D, textures[TEX_Y]);
     glTexImage2D(GL_TEXTURE_2D,
@@ -110,6 +117,19 @@ upload_data()
                  GL_LUMINANCE,
                  GL_UNSIGNED_BYTE,
                  v_data);
+
+    alpha = gdk_pixbuf_get_has_alpha(canvas_pixbuf);
+
+    glActiveTexture(GL_TEXTURE0 + TEX_CANVAS);
+    glBindTexture(GL_TEXTURE_2D, textures[TEX_CANVAS]);
+    glTexImage2D(GL_TEXTURE_2D,
+                 0,
+                 alpha?GL_RGBA:GL_RGB,
+                 gdk_pixbuf_get_width(canvas_pixbuf), gdk_pixbuf_get_height(canvas_pixbuf),
+                 0,
+                 alpha?GL_RGBA:GL_RGB,
+                 GL_UNSIGNED_BYTE,
+                 gdk_pixbuf_get_pixels(canvas_pixbuf));
 }
 
 static void
@@ -159,6 +179,15 @@ setup_textures(GLuint program)
     glBindTexture(GL_TEXTURE_2D, textures[TEX_V]);
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
+
+    /* Select texture unit 2 as the active unit and bind the V texture. */
+    glActiveTexture(GL_TEXTURE0 + TEX_CANVAS);
+    location = glGetUniformLocation(program, "canvas_tex");
+    glUniform1i(location, TEX_CANVAS);  /* Bind Vtext to texture unit 2 */
+
+    glBindTexture(GL_TEXTURE_2D, textures[TEX_CANVAS]);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
     /* Select texture unit 0 as the active unit and bind the Y texture. */
     glActiveTexture(GL_TEXTURE0 + TEX_Y);
@@ -252,10 +281,14 @@ main (int argc, char **argv)
     GLenum err;
     GTimer *frame_timer;
 
+    g_type_init();
+
     frame_timer = g_timer_new();
     g_timer_start(frame_timer);
 
     load_data();
+    canvas_pixbuf = gdk_pixbuf_new_from_file(CANVAS_FILENAME, NULL);
+    g_assert(canvas_pixbuf);
 
     dpy = XOpenDisplay(NULL);
     g_assert(dpy);
