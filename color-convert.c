@@ -4,6 +4,7 @@
 
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
+#include <X11/Xatom.h>
 
 #include <GL/glew.h>
 #include <GL/glx.h>
@@ -211,6 +212,27 @@ compile_program(void)
     return handle;
 }
 
+static void
+set_fullscreen(Display *dpy,
+               Window   window)
+{
+    static Atom wm_state = None;
+    static Atom fullscreen = None;
+
+    if (wm_state == None) {
+        wm_state = XInternAtom(dpy, "_NET_WM_STATE", False);
+        fullscreen = XInternAtom(dpy, "_NET_WM_STATE_FULLSCREEN", False);
+    }
+
+    XChangeProperty(dpy, window,
+                    wm_state,
+                    XA_ATOM,
+                    32,
+                    PropModeReplace,
+                    (unsigned char *)&fullscreen,
+                    1);
+}
+
 int
 main (int argc, char **argv)
 {
@@ -246,6 +268,8 @@ main (int argc, char **argv)
                                  WIDTH, HEIGHT,
                                  0, 0,
                                  0xFFFFFFFF);
+
+    set_fullscreen(dpy, window);
 
     XSelectInput(dpy, window, ExposureMask | StructureNotifyMask);
 
