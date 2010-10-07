@@ -16,13 +16,14 @@
 
 #define FILENAME "sample.yuv420"
 #define CANVAS_FILENAME "canvas.png"
-#define FRAME_TIME_MS 40
+#define FRAME_TIME_MS 1000 / 30
 
 static uint8_t y_data[WIDTH*HEIGHT];
 static uint8_t u_data[WIDTH * HEIGHT / 4];
 static uint8_t v_data[WIDTH * HEIGHT / 4];
 static GdkPixbuf *canvas_pixbuf;
 static GRand *grand;
+static float opacity = 0.5;
 
 enum {
     TEX_Y,
@@ -38,6 +39,7 @@ static const char *program=
   "uniform sampler2D Ytex;\n"
   "uniform sampler2D Utex,Vtex;\n"
   "uniform sampler2D canvas_tex;\n"
+  "uniform float opacity;\n"
   "void main(void) {\n"
   "    float r,g,b,y,u,v;\n"
   "    vec4 txl,ux,vx;\n"
@@ -56,7 +58,7 @@ static const char *program=
   "    g = y - 0.39173*u - 0.81290*v;\n"
   "    b = y + 2.017*u;\n"
 
-  "    gl_FragColor = mix(vec4(r, g, b, 1.0), texture2D(canvas_tex, nxy), 0.5);\n"
+  "    gl_FragColor = mix(vec4(r, g, b, 1.0), texture2D(canvas_tex, nxy), opacity);\n"
   "}\n";
 
 static void
@@ -324,6 +326,8 @@ set_fullscreen(Display *dpy,
                     1);
 }
 
+#define OPACITY_INCREMENT 0.01
+
 int
 main (int argc, char **argv)
 {
@@ -342,6 +346,7 @@ main (int argc, char **argv)
     GLuint handle;
     GLenum err;
     GTimer *frame_timer;
+    double direction = OPACITY_INCREMENT;
 
     g_type_init();
 
@@ -440,6 +445,17 @@ main (int argc, char **argv)
 
         if (mapped) {
             double elapsed;
+            GLint location;
+
+            opacity += direction;
+            if (opacity >= 1.0) {
+                direction = -OPACITY_INCREMENT;
+            } else if (opacity <= 0.0) {
+                direction = OPACITY_INCREMENT;
+            }
+
+            location = glGetUniformLocation(handle, "opacity");
+            glUniform1f(location, opacity);
 
             upload_data();
             draw_scene();
