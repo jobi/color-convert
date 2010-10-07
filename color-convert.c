@@ -22,6 +22,7 @@ static uint8_t y_data[WIDTH*HEIGHT];
 static uint8_t u_data[WIDTH * HEIGHT / 4];
 static uint8_t v_data[WIDTH * HEIGHT / 4];
 static GdkPixbuf *canvas_pixbuf;
+static GRand *grand;
 
 enum {
     TEX_Y,
@@ -83,6 +84,7 @@ draw_scene(void)
 static void
 upload_data()
 {
+    static gboolean canvas_drawn_once = FALSE;
     gboolean alpha;
 
     glActiveTexture(GL_TEXTURE0 + TEX_Y);
@@ -121,15 +123,52 @@ upload_data()
     alpha = gdk_pixbuf_get_has_alpha(canvas_pixbuf);
 
     glActiveTexture(GL_TEXTURE0 + TEX_CANVAS);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glBindTexture(GL_TEXTURE_2D, textures[TEX_CANVAS]);
-    glTexImage2D(GL_TEXTURE_2D,
-                 0,
-                 alpha?GL_RGBA:GL_RGB,
-                 gdk_pixbuf_get_width(canvas_pixbuf), gdk_pixbuf_get_height(canvas_pixbuf),
-                 0,
-                 alpha?GL_RGBA:GL_RGB,
-                 GL_UNSIGNED_BYTE,
-                 gdk_pixbuf_get_pixels(canvas_pixbuf));
+
+    if (!canvas_drawn_once) {
+        glTexImage2D(GL_TEXTURE_2D,
+                     0,
+                     alpha?GL_RGBA:GL_RGB,
+                     gdk_pixbuf_get_width(canvas_pixbuf), gdk_pixbuf_get_height(canvas_pixbuf),
+                     0,
+                     alpha?GL_RGBA:GL_RGB,
+                     GL_UNSIGNED_BYTE,
+                     gdk_pixbuf_get_pixels(canvas_pixbuf));
+        canvas_drawn_once = TRUE;
+    } else {
+        int canvas_width = gdk_pixbuf_get_width(canvas_pixbuf);
+        int canvas_height = gdk_pixbuf_get_height(canvas_pixbuf);
+
+        int x = g_rand_int_range(grand, 0, canvas_width - 2);
+        int y = g_rand_int_range(grand, 0, canvas_height - 2);
+
+        int width = g_rand_int_range(grand, 1, canvas_width - x - 1);
+        int height = g_rand_int_range(grand, 1, canvas_height - y - 2);
+
+        GdkPixbuf *sub = gdk_pixbuf_new(GDK_COLORSPACE_RGB,
+                                        alpha,
+                                        gdk_pixbuf_get_bits_per_sample(canvas_pixbuf),
+                                        width,
+                                        height);
+
+        gdk_pixbuf_copy_area(canvas_pixbuf,
+                             x, y,
+                             width, height,
+                             sub,
+                             0, 0);
+
+        glTexSubImage2D(GL_TEXTURE_2D,
+                        0,
+                        x,
+                        y,
+                        width,
+                        height,
+                        alpha?GL_RGBA:GL_RGB,
+                        GL_UNSIGNED_BYTE,
+                        gdk_pixbuf_get_pixels(sub));
+        gdk_pixbuf_unref(sub);
+    }
 }
 
 static void
@@ -282,6 +321,8 @@ main (int argc, char **argv)
     GTimer *frame_timer;
 
     g_type_init();
+
+    grand = g_rand_new();
 
     frame_timer = g_timer_new();
     g_timer_start(frame_timer);
