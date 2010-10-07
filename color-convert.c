@@ -81,44 +81,41 @@ draw_scene(void)
     glEnd();
 }
 
+#define MINIMUM_REGION_WIDTH 100
+#define MINIMUM_REGION_HEIGHT 100
+
 static void
 upload_data()
 {
-    static gboolean canvas_drawn_once = FALSE;
     gboolean alpha;
 
     glActiveTexture(GL_TEXTURE0 + TEX_Y);
     glBindTexture(GL_TEXTURE_2D, textures[TEX_Y]);
-    glTexImage2D(GL_TEXTURE_2D,
-                 0,
-                 GL_LUMINANCE,
-                 WIDTH, HEIGHT,
-                 0,
-                 GL_LUMINANCE,
-                 GL_UNSIGNED_BYTE,
-                 y_data);
+    glTexSubImage2D(GL_TEXTURE_2D,
+                    0, 0, 0,
+                    WIDTH, HEIGHT,
+                    GL_LUMINANCE,
+                    GL_UNSIGNED_BYTE,
+                    y_data);
 
     glActiveTexture(GL_TEXTURE0 + TEX_U);
     glBindTexture(GL_TEXTURE_2D, textures[TEX_U]);
-    glTexImage2D(GL_TEXTURE_2D,
-                 0,
-                 GL_LUMINANCE,
-                 WIDTH / 2, HEIGHT / 2,
-                 0,
-                 GL_LUMINANCE,
-                 GL_UNSIGNED_BYTE,
-                 u_data);
+
+    glTexSubImage2D(GL_TEXTURE_2D,
+                    0, 0, 0,
+                    WIDTH / 2, HEIGHT / 2,
+                    GL_LUMINANCE,
+                    GL_UNSIGNED_BYTE,
+                    u_data);
 
     glActiveTexture(GL_TEXTURE0 + TEX_V);
     glBindTexture(GL_TEXTURE_2D, textures[TEX_V]);
-    glTexImage2D(GL_TEXTURE_2D,
-                 0,
-                 GL_LUMINANCE,
-                 WIDTH / 2, HEIGHT / 2,
-                 0,
-                 GL_LUMINANCE,
-                 GL_UNSIGNED_BYTE,
-                 v_data);
+    glTexSubImage2D(GL_TEXTURE_2D,
+                    0, 0, 0,
+                    WIDTH / 2, HEIGHT / 2,
+                    GL_LUMINANCE,
+                    GL_UNSIGNED_BYTE,
+                    v_data);
 
     alpha = gdk_pixbuf_get_has_alpha(canvas_pixbuf);
 
@@ -126,38 +123,20 @@ upload_data()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glBindTexture(GL_TEXTURE_2D, textures[TEX_CANVAS]);
 
-    if (!canvas_drawn_once) {
-        glTexImage2D(GL_TEXTURE_2D,
-                     0,
-                     alpha?GL_RGBA:GL_RGB,
-                     gdk_pixbuf_get_width(canvas_pixbuf), gdk_pixbuf_get_height(canvas_pixbuf),
-                     0,
-                     alpha?GL_RGBA:GL_RGB,
-                     GL_UNSIGNED_BYTE,
-                     gdk_pixbuf_get_pixels(canvas_pixbuf));
-        canvas_drawn_once = TRUE;
-    } else {
+    {
         int canvas_width = gdk_pixbuf_get_width(canvas_pixbuf);
         int canvas_height = gdk_pixbuf_get_height(canvas_pixbuf);
 
-        int x = g_rand_int_range(grand, 0, canvas_width - 2);
-        int y = g_rand_int_range(grand, 0, canvas_height - 2);
+        int x = g_rand_int_range(grand, 0, canvas_width - MINIMUM_REGION_WIDTH - 1);
+        int y = g_rand_int_range(grand, 0, canvas_height - MINIMUM_REGION_HEIGHT - 1);
 
-        int width = g_rand_int_range(grand, 1, canvas_width - x - 1);
-        int height = g_rand_int_range(grand, 1, canvas_height - y - 2);
+        int width = g_rand_int_range(grand, MINIMUM_REGION_WIDTH, canvas_width - x - 1);
+        int height = g_rand_int_range(grand, MINIMUM_REGION_HEIGHT, canvas_height - y - 1);
 
-        GdkPixbuf *sub = gdk_pixbuf_new(GDK_COLORSPACE_RGB,
-                                        alpha,
-                                        gdk_pixbuf_get_bits_per_sample(canvas_pixbuf),
-                                        width,
-                                        height);
-
-        gdk_pixbuf_copy_area(canvas_pixbuf,
-                             x, y,
-                             width, height,
-                             sub,
-                             0, 0);
-
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glPixelStorei(GL_UNPACK_SKIP_PIXELS, x);
+        glPixelStorei(GL_UNPACK_SKIP_ROWS, y);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, canvas_width);
         glTexSubImage2D(GL_TEXTURE_2D,
                         0,
                         x,
@@ -166,8 +145,11 @@ upload_data()
                         height,
                         alpha?GL_RGBA:GL_RGB,
                         GL_UNSIGNED_BYTE,
-                        gdk_pixbuf_get_pixels(sub));
-        gdk_pixbuf_unref(sub);
+                        gdk_pixbuf_get_pixels(canvas_pixbuf));
+
+        glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
+        glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
     }
 }
 
@@ -198,8 +180,27 @@ static void
 setup_textures(GLuint program)
 {
     GLint location;
+    gboolean alpha;
 
     glGenTextures(N_TEX, textures);
+
+    /* Select texture unit 0 as the active unit and bind the Y texture. */
+    glActiveTexture(GL_TEXTURE0 + TEX_Y);
+    location = glGetUniformLocation(program,"Ytex");
+    glUniform1i(location, TEX_Y);  /* Bind Ytex to texture unit 0 */
+
+    glBindTexture(GL_TEXTURE_2D, textures[TEX_Y]);
+    glTexImage2D(GL_TEXTURE_2D,
+                 0,
+                 GL_LUMINANCE,
+                 WIDTH, HEIGHT,
+                 0,
+                 GL_LUMINANCE,
+                 GL_UNSIGNED_BYTE,
+                 y_data);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
     /* Select texture unit 1 as the active unit and bind the U texture. */
     glActiveTexture(GL_TEXTURE0 + TEX_U);
@@ -207,6 +208,15 @@ setup_textures(GLuint program)
     glUniform1i(location, TEX_U);  /* Bind Utex to texture unit 1 */
 
     glBindTexture(GL_TEXTURE_2D, textures[TEX_U]);
+    glTexImage2D(GL_TEXTURE_2D,
+                 0,
+                 GL_LUMINANCE,
+                 WIDTH / 2, HEIGHT / 2,
+                 0,
+                 GL_LUMINANCE,
+                 GL_UNSIGNED_BYTE,
+                 u_data);
+
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
@@ -216,10 +226,19 @@ setup_textures(GLuint program)
     glUniform1i(location, TEX_V);  /* Bind Vtext to texture unit 2 */
 
     glBindTexture(GL_TEXTURE_2D, textures[TEX_V]);
+    glTexImage2D(GL_TEXTURE_2D,
+                 0,
+                 GL_LUMINANCE,
+                 WIDTH / 2, HEIGHT / 2,
+                 0,
+                 GL_LUMINANCE,
+                 GL_UNSIGNED_BYTE,
+                 v_data);
+
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
 
-    /* Select texture unit 2 as the active unit and bind the V texture. */
+    /* Select texture unit 3 as the active unit and bind the canvas texture. */
     glActiveTexture(GL_TEXTURE0 + TEX_CANVAS);
     location = glGetUniformLocation(program, "canvas_tex");
     glUniform1i(location, TEX_CANVAS);  /* Bind Vtext to texture unit 2 */
@@ -227,15 +246,19 @@ setup_textures(GLuint program)
     glBindTexture(GL_TEXTURE_2D, textures[TEX_CANVAS]);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
-    /* Select texture unit 0 as the active unit and bind the Y texture. */
-    glActiveTexture(GL_TEXTURE0 + TEX_Y);
-    location = glGetUniformLocation(program,"Ytex");
-    glUniform1i(location, TEX_Y);  /* Bind Ytex to texture unit 0 */
+    alpha = gdk_pixbuf_get_has_alpha(canvas_pixbuf);
 
-    glBindTexture(GL_TEXTURE_2D, textures[TEX_Y]);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexImage2D(GL_TEXTURE_2D,
+                 0,
+                 alpha?GL_RGBA8:GL_RGB,
+                 gdk_pixbuf_get_width(canvas_pixbuf), gdk_pixbuf_get_height(canvas_pixbuf),
+                 0,
+                 alpha?GL_RGBA:GL_RGB,
+                 GL_UNSIGNED_BYTE, NULL);
+
 }
 
 static GLuint
