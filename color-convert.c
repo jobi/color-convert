@@ -8,6 +8,7 @@
 #include <X11/Xatom.h>
 
 #include <GL/glew.h>
+#include <GL/glut.h>
 #include <GL/glx.h>
 #include <GL/glext.h>
 
@@ -259,7 +260,8 @@ setup_textures(GLuint program)
                  gdk_pixbuf_get_width(canvas_pixbuf), gdk_pixbuf_get_height(canvas_pixbuf),
                  0,
                  alpha?GL_RGBA:GL_RGB,
-                 GL_UNSIGNED_BYTE, NULL);
+                 GL_UNSIGNED_BYTE,
+                 gdk_pixbuf_get_pixels(canvas_pixbuf));
 
 }
 
@@ -305,44 +307,13 @@ compile_program(void)
     return handle;
 }
 
-static void
-set_fullscreen(Display *dpy,
-               Window   window)
-{
-    static Atom wm_state = None;
-    static Atom fullscreen = None;
-
-    if (wm_state == None) {
-        wm_state = XInternAtom(dpy, "_NET_WM_STATE", False);
-        fullscreen = XInternAtom(dpy, "_NET_WM_STATE_FULLSCREEN", False);
-    }
-
-    XChangeProperty(dpy, window,
-                    wm_state,
-                    XA_ATOM,
-                    32,
-                    PropModeReplace,
-                    (unsigned char *)&fullscreen,
-                    1);
-}
-
 #define OPACITY_INCREMENT 0.01
 
 int
 main (int argc, char **argv)
 {
-    Display *dpy;
-    int screen;
-    Window window;
-    XWindowAttributes attr = {0, };
-    int n_visual_infos;
-    XVisualInfo visual_template;
-    XVisualInfo *visual_infos;
-    GLXContext ctx;
     GTimer *timer;
     int frame_count;
-    gboolean mapped;
-    const char *glx_extensions;
     GLuint handle;
     GLenum err;
     GTimer *frame_timer;
@@ -359,39 +330,9 @@ main (int argc, char **argv)
     canvas_pixbuf = gdk_pixbuf_new_from_file(CANVAS_FILENAME, NULL);
     g_assert(canvas_pixbuf);
 
-    dpy = XOpenDisplay(NULL);
-    g_assert(dpy);
-
-    screen = DefaultScreen(dpy);
-
-    window = XCreateSimpleWindow(dpy,
-                                 RootWindow(dpy, screen),
-                                 0, 0,
-                                 WIDTH, HEIGHT,
-                                 0, 0,
-                                 0xFFFFFFFF);
-
-    set_fullscreen(dpy, window);
-
-    XSelectInput(dpy, window, ExposureMask | StructureNotifyMask);
-
-    XGetWindowAttributes(dpy, window, &attr);
-
-    n_visual_infos = 0;
-    visual_template.visualid = attr.visual->visualid;
-
-    visual_infos = XGetVisualInfo(dpy,
-                                  VisualIDMask,
-                                  &visual_template,
-                                  &n_visual_infos);
-    g_assert(n_visual_infos == 1);
-
-    glx_extensions = glXQueryExtensionsString(dpy, 0);
-    g_assert(strstr(glx_extensions, "GLX_SGI_video_sync") != NULL);
-
-    ctx = glXCreateContext(dpy, &visual_infos[0], NULL, TRUE);
-
-    glXMakeCurrent(dpy, window, ctx);
+    glutInit(&argc, argv);
+    glutCreateWindow("color-convert");
+    glutFullScreen();
 
     err = glewInit();
     g_assert(err == GLEW_OK);
@@ -413,64 +354,36 @@ main (int argc, char **argv)
     glUseProgram(handle);
     setup_textures(handle);
 
-    mapped = FALSE;
-    XMapWindow(dpy, window);
-
     frame_count = 1;
     timer = g_timer_new();
 
     while (TRUE) {
+        double elapsed;
+        GLint location;
 
-        if (XPending(dpy)) {
-            XEvent event;
-
-            XNextEvent(dpy, &event);
-
-            switch (event.type) {
-                case Expose:
-                    break;
-
-                case MapNotify:
-                    mapped = TRUE;
-                    break;
-
-                case UnmapNotify:
-                    mapped = FALSE;
-                    break;
-
-                default:
-                    break;
-            }
+        opacity += direction;
+        if (opacity >= 1.0) {
+            direction = -OPACITY_INCREMENT;
+        } else if (opacity <= 0.0) {
+            direction = OPACITY_INCREMENT;
         }
 
-        if (mapped) {
-            double elapsed;
-            GLint location;
+        location = glGetUniformLocation(handle, "opacity");
+        glUniform1f(location, opacity);
 
-            opacity += direction;
-            if (opacity >= 1.0) {
-                direction = -OPACITY_INCREMENT;
-            } else if (opacity <= 0.0) {
-                direction = OPACITY_INCREMENT;
-            }
+        upload_data();
+        draw_scene();
 
-            location = glGetUniformLocation(handle, "opacity");
-            glUniform1f(location, opacity);
+        glutSwapBuffers();
 
-            upload_data();
-            draw_scene();
+        frame_count ++;
 
-            glXSwapBuffers(dpy, window);
-
-            frame_count ++;
-
-            elapsed = g_timer_elapsed(frame_timer, NULL) * 1000;
-            if (elapsed < FRAME_TIME_MS) {
-                g_usleep(1000 * (FRAME_TIME_MS - elapsed));
-            }
-
-            g_timer_start(frame_timer);
+        elapsed = g_timer_elapsed(frame_timer, NULL) * 1000;
+        if (elapsed < FRAME_TIME_MS) {
+            g_usleep(1000 * (FRAME_TIME_MS - elapsed));
         }
+
+        g_timer_start(frame_timer);
 
         if (frame_count % 1000 == 0) {
             double fps;
