@@ -43,6 +43,7 @@ static const char *program=
   "uniform float opacity;\n"
   "void main(void) {\n"
   "    float r,g,b,y,u,v;\n"
+  "    float a;\n"
   "    vec4 txl,ux,vx;\n"
   "    vec2 nxy;\n"
 
@@ -59,7 +60,8 @@ static const char *program=
   "    g = y - 0.39173*u - 0.81290*v;\n"
   "    b = y + 2.017*u;\n"
 
-  "    gl_FragColor = mix(vec4(r, g, b, 1.0), texture2D(canvas_tex, nxy), opacity);\n"
+  "    a = texture2D(canvas_tex, nxy).a * opacity;\n"
+  "    gl_FragColor = (1 - a) * vec4(r, g, b, 1.0) + a * texture2D(canvas_tex, nxy);\n"
   "}\n";
 
 static void
